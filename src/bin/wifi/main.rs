@@ -10,14 +10,14 @@ use esp_idf_svc::nvs::{
 use esp_idf_svc::wifi::{
     AccessPointConfiguration, AccessPointInfo, AuthMethod, Configuration, EspWifi,
 };
+use serde::{Deserialize, Serialize};
 use std::str::FromStr;
+use std::sync::Mutex;
+//use std::net::Ipv4Addr;
 //use esp_idf_svc::hal::spi;
 //use esp_idf_svc::hal::gpio;
 //use smart_leds::SmartLedsWrite;
 //use ws2812_spi::Ws2812;
-use serde::{Deserialize, Serialize};
-use std::sync::Mutex;
-//use std::net::Ipv4Addr;
 
 use c3zero::hash::hash_ssid;
 
@@ -28,7 +28,7 @@ struct WifiConfig {
 }
 
 impl WifiConfig {
-    fn _new(ssid: &str, password: &str) -> anyhow::Result<Self> {
+    fn new(ssid: &str, password: &str) -> anyhow::Result<Self> {
         Ok(WifiConfig {
             ssid: ssid
                 .try_into()
@@ -43,9 +43,9 @@ impl WifiConfig {
 #[derive(Serialize, Deserialize, Debug)]
 struct KnownAPs(Vec<heapless::String<32>>);
 
+static NVS: Mutex<Option<EspNvs<NvsDefault>>> = Mutex::new(None);
 static WIFI_SCAN: Mutex<Vec<AccessPointInfo>> = Mutex::new(Vec::new());
 static KNOWN_APS: Mutex<KnownAPs> = Mutex::new(KnownAPs(Vec::new()));
-// XXX Need static NVS
 
 #[derive(askama::Template)]
 #[template(path = "../templates/config_page.html")]
@@ -69,13 +69,21 @@ fn main() -> anyhow::Result<()> {
     // Non Volatile Storage
     let nvs_default_partition: EspNvsPartition<NvsDefault> = EspDefaultNvsPartition::take()?;
     let nvs = EspDefaultNvs::new(nvs_default_partition.clone(), "ap-credentials", true)?;
+    log::info!("Initialising NVS:");
+    {
+        let mut nvs_static = NVS.lock().unwrap();
+        *nvs_static = Some(nvs);
+    }
 
-    update_known_aps(&nvs)?;
+    update_known_aps()?;
+    log::info!("Getting know APs from NVS:");
+    let _ = KNOWN_APS.try_lock().is_ok_and(|aps| {
+        log::info!(">> APs {:?}", aps);
+        true
+    });
 
-    //let c = WifiConfig::new("CR-GUEST", "caribou-gnu")?;
-    //save_wifi_config(&mut nvs, &c)?;
-    //let c = WifiConfig::new("TEST", "test")?;
-    //save_wifi_config(&mut nvs, &c)?;
+    save_wifi_config(&WifiConfig::new("CR-GUEST", "caribou-gnu")?)?;
+    save_wifi_config(&WifiConfig::new("TEST", "test")?)?;
 
     let mut wifi: EspWifi<'_> = EspWifi::new(
         peripherals.modem,
@@ -95,7 +103,7 @@ fn main() -> anyhow::Result<()> {
 
     // Check if WiFi config is stored
     let mut wifi_config: Option<WifiConfig> = None;
-    for config in find_wifi_config(&nvs)? {
+    for config in find_wifi_config()? {
         log::info!("Trying network: {}", config.ssid);
         match connect_wifi(&mut wifi, &config, 10000) {
             Ok(true) => {
@@ -121,15 +129,15 @@ fn main() -> anyhow::Result<()> {
         start_http_server()?
     };
 
-    let mut i = 0;
     loop {
         FreeRtos::delay_ms(1000); // Delay for 100 milliseconds
-        log::info!("Tick: {}", i);
-        i += 1;
     }
 }
 
-fn _test_nvs(nvs: &mut EspNvs<NvsDefault>, key: &str, value: &[u8]) -> anyhow::Result<()> {
+fn _test_nvs(key: &str, value: &[u8]) -> anyhow::Result<()> {
+    let mut nvs = NVS.lock().unwrap();
+    let nvs = nvs.as_mut().ok_or(anyhow::anyhow!("NVS not initialized"))?;
+
     log::info!("Setting NVS: {}", key);
     nvs.set_raw(key, value)?;
 
@@ -144,10 +152,14 @@ fn _test_nvs(nvs: &mut EspNvs<NvsDefault>, key: &str, value: &[u8]) -> anyhow::R
     Ok(())
 }
 
-fn _save_wifi_config(nvs: &mut EspNvs<NvsDefault>, c: &WifiConfig) -> anyhow::Result<()> {
+fn save_wifi_config(c: &WifiConfig) -> anyhow::Result<()> {
+    let mut nvs = NVS.lock().unwrap();
+    let nvs = nvs.as_mut().ok_or(anyhow::anyhow!("NVS not initialized"))?;
     // Hash SSID in case it us >16 bytes (NVS key limit)
     let k = hash_ssid(c.ssid.as_str());
     let v = serde_json::to_vec(&c)?;
+
+    // If there is an existing config we overwrite
     log::info!("Setting NVS Config: {} [{}]", c.ssid, k.as_str());
     nvs.set_raw(k.as_str(), v.as_slice())
         .map_err(|e| anyhow::anyhow!("Error setting NVS config: {} [{}]", c.ssid, e))?;
@@ -171,13 +183,16 @@ fn _save_wifi_config(nvs: &mut EspNvs<NvsDefault>, c: &WifiConfig) -> anyhow::Re
             .map_err(|e| anyhow::anyhow!("Error updating KNOWN_APS: [{}]", e))?;
     }
 
-    // Updatae KNOWN_APS static
+    // Update KNOWN_APS static
     let mut aps = KNOWN_APS.lock().unwrap();
     *aps = known_aps;
     Ok(())
 }
 
-fn delete_wifi_config(nvs: &mut EspNvs<NvsDefault>, ssid: &str) -> anyhow::Result<()> {
+fn delete_wifi_config(ssid: &str) -> anyhow::Result<()> {
+    let mut nvs = NVS.lock().unwrap();
+    let nvs = nvs.as_mut().ok_or(anyhow::anyhow!("NVS not initialized"))?;
+
     log::info!("Deleting SSID: {}", ssid);
     let k = hash_ssid(ssid);
     nvs.remove(k.as_str())?;
@@ -204,7 +219,9 @@ fn delete_wifi_config(nvs: &mut EspNvs<NvsDefault>, ssid: &str) -> anyhow::Resul
     Ok(())
 }
 
-fn update_known_aps(nvs: &EspNvs<NvsDefault>) -> anyhow::Result<()> {
+fn update_known_aps() -> anyhow::Result<()> {
+    let nvs = NVS.lock().unwrap();
+    let nvs = nvs.as_ref().ok_or(anyhow::anyhow!("NVS not initialized"))?;
     let mut known_aps: KnownAPs = KnownAPs(Vec::new());
     let mut data = [0_u8; 256];
     if let Ok(Some(data)) = nvs.get_raw("KNOWN_APS", &mut data) {
@@ -237,8 +254,10 @@ fn wifi_scan(wifi: &mut EspWifi) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn find_wifi_config(nvs: &EspNvs<NvsDefault>) -> anyhow::Result<Vec<WifiConfig>> {
+fn find_wifi_config() -> anyhow::Result<Vec<WifiConfig>> {
     let aps = WIFI_SCAN.lock().unwrap();
+    let nvs = NVS.lock().unwrap();
+    let nvs = nvs.as_ref().ok_or(anyhow::anyhow!("NVS not initialized"))?;
     let mut out = Vec::new();
     let mut seen = Vec::new(); // We can see same SSID on multiple bands
     for ap in aps.iter() {
@@ -366,19 +385,65 @@ fn start_http_server<'a>() -> anyhow::Result<EspHttpServer<'a>> {
 
     // Handle deleting an AP
     server.fn_handler("/delete/*", http::Method::Get, |req| {
+        log::info!("DELETE: {:?}", req.uri());
         let ssid = req.uri().split('/').next_back().unwrap_or("").to_string();
-        let mut response = req.into_ok_response()?;
-        let mut nvs = EspDefaultNvs::new(EspDefaultNvsPartition::take()?, "ap-credentials", true)?;
-        match delete_wifi_config(&mut nvs, &ssid) {
+        match delete_wifi_config(&ssid) {
             Ok(_) => {
                 log::info!("Successfully deleted SSID: {}", ssid);
-                response.write("SSID Removed".as_bytes())?;
+                req.into_response(302, Some("Successfully deleted SSID"), &[("Location", "/")])?;
             }
             Err(e) => {
                 log::error!("Failed to delete SSID: {} - {}", ssid, e);
-                response.write("Error removing SSID".as_bytes())?;
+                req.into_response(302, Some("Failed to delete SSID"), &[("Location", "/")])?;
             }
         };
+        Ok::<(), anyhow::Error>(())
+    })?;
+
+    // Handle adding a new AP
+    server.fn_handler("/add", http::Method::Post, |mut req| {
+        // Read the body of the request
+        let mut buf = [0_u8; 256];
+        let len = req.read(&mut buf)?;
+        let body = std::str::from_utf8(&buf[..len])?;
+
+        // Parse the form data (assuming URL-encoded format)
+        let params: Vec<&str> = body.split('&').collect();
+        let mut ssid = None;
+        let mut password = None;
+
+        for param in params {
+            let key_value: Vec<&str> = param.split('=').collect();
+            if key_value.len() == 2 {
+                match key_value[0] {
+                    "ssid" => ssid = Some(key_value[1]),
+                    "password" => password = Some(key_value[1]),
+                    _ => (),
+                }
+            }
+        }
+
+        // Validate the input
+        if let (Some(ssid), Some(password)) = (ssid, password) {
+            let ssid = urlencoding::decode(ssid)?;
+            let password = urlencoding::decode(password)?;
+
+            // Save the WiFi configuration
+            match save_wifi_config(&WifiConfig::new(&ssid, &password)?) {
+                Ok(_) => {
+                    log::info!("Successfully saved SSID: {}", ssid);
+                    req.into_response(302, Some("Successfully saved SSID"), &[("Location", "/")])?;
+                }
+                Err(e) => {
+                    log::error!("Failed to save SSID: {} - {}", ssid, e);
+                    req.into_response(302, Some("Failed to save SSID"), &[("Location", "/")])?;
+                }
+            }
+        } else {
+            log::error!("Invalid form data");
+            req.into_response(400, Some("Invalid form data"), &[])?;
+        }
+
         Ok::<(), anyhow::Error>(())
     })?;
 
