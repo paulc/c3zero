@@ -4,13 +4,10 @@ use esp_idf_svc::hal::delay::FreeRtos;
 use esp_idf_svc::hal::prelude::*;
 use esp_idf_svc::http;
 use esp_idf_svc::http::server::{Configuration as HttpConfig, EspHttpServer};
-use esp_idf_svc::nvs::{
-    EspDefaultNvs, EspDefaultNvsPartition, EspNvs, EspNvsPartition, NvsDefault,
-};
+use esp_idf_svc::nvs::EspDefaultNvsPartition;
 use esp_idf_svc::wifi::{
     AccessPointConfiguration, AccessPointInfo, AuthMethod, Configuration, EspWifi,
 };
-use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use std::sync::Mutex;
 //use std::net::Ipv4Addr;
@@ -19,33 +16,9 @@ use std::sync::Mutex;
 //use smart_leds::SmartLedsWrite;
 //use ws2812_spi::Ws2812;
 
-use c3zero::hash::hash_ssid;
-
-#[derive(Serialize, Deserialize, Debug)]
-struct WifiConfig {
-    ssid: heapless::String<32>,
-    password: heapless::String<64>,
-}
-
-impl WifiConfig {
-    fn new(ssid: &str, password: &str) -> anyhow::Result<Self> {
-        Ok(WifiConfig {
-            ssid: ssid
-                .try_into()
-                .map_err(|_| anyhow::anyhow!("Failed to create SSID"))?,
-            password: password
-                .try_into()
-                .map_err(|_| anyhow::anyhow!("Failed to create PW"))?,
-        })
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-struct KnownAPs(Vec<heapless::String<32>>);
-
-static NVS: Mutex<Option<EspNvs<NvsDefault>>> = Mutex::new(None);
+use c3zero::nvs::{APStore, KNOWN_APS};
+use c3zero::wifi::WifiConfig;
 static WIFI_SCAN: Mutex<Vec<AccessPointInfo>> = Mutex::new(Vec::new());
-static KNOWN_APS: Mutex<KnownAPs> = Mutex::new(KnownAPs(Vec::new()));
 
 #[derive(askama::Template)]
 #[template(path = "../templates/config_page.html")]
@@ -66,24 +39,8 @@ fn main() -> anyhow::Result<()> {
     let peripherals = Peripherals::take()?;
     let sys_loop = EspSystemEventLoop::take()?;
 
-    // Non Volatile Storage
-    let nvs_default_partition: EspNvsPartition<NvsDefault> = EspDefaultNvsPartition::take()?;
-    let nvs = EspDefaultNvs::new(nvs_default_partition.clone(), "ap-credentials", true)?;
-    log::info!("Initialising NVS:");
-    {
-        let mut nvs_static = NVS.lock().unwrap();
-        *nvs_static = Some(nvs);
-    }
-
-    update_known_aps()?;
-    log::info!("Getting know APs from NVS:");
-    let _ = KNOWN_APS.try_lock().is_ok_and(|aps| {
-        log::info!(">> APs {:?}", aps);
-        true
-    });
-
-    //save_wifi_config(&WifiConfig::new("CR-GUEST", "caribou-gnu")?)?;
-    //save_wifi_config(&WifiConfig::new("TEST", "test")?)?;
+    let nvs_default_partition = EspDefaultNvsPartition::take()?;
+    APStore::init(nvs_default_partition.clone())?;
 
     let mut wifi: EspWifi<'_> = EspWifi::new(
         peripherals.modem,
@@ -101,9 +58,26 @@ fn main() -> anyhow::Result<()> {
     // WiFi Scan
     wifi_scan(&mut wifi)?;
 
-    // Check if WiFi config is stored
+    // Find WiFi Config
     let mut wifi_config: Option<WifiConfig> = None;
-    for config in find_wifi_config()? {
+    let mut known = Vec::new();
+    let mut seen = Vec::new(); // We can see same SSID on multiple bands
+    {
+        // Only lock mutex in block
+        let aps = WIFI_SCAN.lock().unwrap();
+        for ap in aps.iter() {
+            if !seen.contains(&ap.ssid.as_str()) {
+                // Check if we have configuration in NVS (using hashed SSID)
+                if let Ok(Some(config)) = APStore::get_wifi_config(&ap.ssid.as_str()) {
+                    log::info!("Found AP config: {}", ap.ssid.as_str());
+                    known.push(config);
+                }
+                seen.push(ap.ssid.as_str());
+            }
+        }
+    }
+
+    for config in known {
         log::info!("Trying network: {}", config.ssid);
         match connect_wifi(&mut wifi, &config, 10000) {
             Ok(true) => {
@@ -134,105 +108,6 @@ fn main() -> anyhow::Result<()> {
     }
 }
 
-fn _test_nvs(key: &str, value: &[u8]) -> anyhow::Result<()> {
-    let mut nvs = NVS.lock().unwrap();
-    let nvs = nvs.as_mut().ok_or(anyhow::anyhow!("NVS not initialized"))?;
-
-    log::info!("Setting NVS: {}", key);
-    nvs.set_raw(key, value)?;
-
-    log::info!("Getting NVS: {}", key);
-    let mut data = [0_u8; 1024];
-    if let Ok(Some(data)) = nvs.get_raw(key, &mut data) {
-        log::info!("Found Key: {} len={} data={:?}", key, data.len(), data);
-    }
-
-    log::info!("Removing Key: {}", key);
-    nvs.remove(key)?;
-    Ok(())
-}
-
-fn save_wifi_config(c: &WifiConfig) -> anyhow::Result<()> {
-    let mut nvs = NVS.lock().unwrap();
-    let nvs = nvs.as_mut().ok_or(anyhow::anyhow!("NVS not initialized"))?;
-    // Hash SSID in case it us >16 bytes (NVS key limit)
-    let k = hash_ssid(c.ssid.as_str());
-    let v = serde_json::to_vec(&c)?;
-
-    // If there is an existing config we overwrite
-    log::info!("Setting NVS Config: {} [{}]", c.ssid, k.as_str());
-    nvs.set_raw(k.as_str(), v.as_slice())
-        .map_err(|e| anyhow::anyhow!("Error setting NVS config: {} [{}]", c.ssid, e))?;
-
-    // Add to KNOWN_APS key
-    let mut known_aps: KnownAPs = KnownAPs(Vec::new());
-    let mut data = [0_u8; 256];
-    if let Ok(Some(data)) = nvs.get_raw("KNOWN_APS", &mut data) {
-        known_aps = serde_json::from_slice(data)?;
-    }
-    log::info!(
-        ">>> KNOWN_APS: {:?} {}",
-        known_aps,
-        known_aps.0.contains(&c.ssid)
-    );
-    // Update existing value and save back to NVS
-    if !known_aps.0.contains(&c.ssid) {
-        known_aps.0.push(c.ssid.clone());
-        let known_aps = serde_json::to_vec(&known_aps)?;
-        nvs.set_raw("KNOWN_APS", known_aps.as_slice())
-            .map_err(|e| anyhow::anyhow!("Error updating KNOWN_APS: [{}]", e))?;
-    }
-
-    // Update KNOWN_APS static
-    let mut aps = KNOWN_APS.lock().unwrap();
-    *aps = known_aps;
-    Ok(())
-}
-
-fn delete_wifi_config(ssid: &str) -> anyhow::Result<()> {
-    let mut nvs = NVS.lock().unwrap();
-    let nvs = nvs.as_mut().ok_or(anyhow::anyhow!("NVS not initialized"))?;
-
-    log::info!("Deleting SSID: {}", ssid);
-    let k = hash_ssid(ssid);
-    nvs.remove(k.as_str())?;
-
-    // Remove from KNOWN_APS key
-    let mut known_aps: KnownAPs = KnownAPs(Vec::new());
-    let mut data = [0_u8; 256];
-    if let Ok(Some(data)) = nvs.get_raw("KNOWN_APS", &mut data) {
-        known_aps = serde_json::from_slice(data)?;
-    }
-
-    // Update existing value and save back to NVS
-    if let Some(index) = known_aps.0.iter().position(|x| x == ssid) {
-        known_aps.0.remove(index); // Remove the item at the found index
-        let known_aps = serde_json::to_vec(&known_aps)?;
-        nvs.set_raw("KNOWN_APS", known_aps.as_slice())
-            .map_err(|e| anyhow::anyhow!("Error updating KNOWN_APS: [{}]", e))?;
-    }
-    log::info!("Updating KNOWN_APS: {:?}", known_aps);
-
-    // Update KNOWN_APS static
-    let mut aps = KNOWN_APS.lock().unwrap();
-    *aps = known_aps;
-    Ok(())
-}
-
-fn update_known_aps() -> anyhow::Result<()> {
-    let nvs = NVS.lock().unwrap();
-    let nvs = nvs.as_ref().ok_or(anyhow::anyhow!("NVS not initialized"))?;
-    let mut known_aps: KnownAPs = KnownAPs(Vec::new());
-    let mut data = [0_u8; 256];
-    if let Ok(Some(data)) = nvs.get_raw("KNOWN_APS", &mut data) {
-        known_aps = serde_json::from_slice(data)?;
-    }
-    log::info!("Updating KNOWN_APS >> {:?}", known_aps);
-    let mut aps = KNOWN_APS.lock().unwrap();
-    *aps = known_aps;
-    Ok(())
-}
-
 fn wifi_scan(wifi: &mut EspWifi) -> anyhow::Result<()> {
     log::info!("Starting WiFi scan...");
     // Note that scan will disable WiFi connection
@@ -252,27 +127,6 @@ fn wifi_scan(wifi: &mut EspWifi) -> anyhow::Result<()> {
     let mut aps = WIFI_SCAN.lock().unwrap();
     *aps = scan;
     Ok(())
-}
-
-fn find_wifi_config() -> anyhow::Result<Vec<WifiConfig>> {
-    let aps = WIFI_SCAN.lock().unwrap();
-    let nvs = NVS.lock().unwrap();
-    let nvs = nvs.as_ref().ok_or(anyhow::anyhow!("NVS not initialized"))?;
-    let mut out = Vec::new();
-    let mut seen = Vec::new(); // We can see same SSID on multiple bands
-    for ap in aps.iter() {
-        if !seen.contains(&ap.ssid.as_str()) {
-            // Check if we have configuration in NVS (using hashed SSID)
-            let mut data = [0_u8; 64];
-            if let Ok(Some(data)) = nvs.get_raw(hash_ssid(ap.ssid.as_str()).as_str(), &mut data) {
-                let config: WifiConfig = serde_json::from_slice(data)?;
-                log::info!("Found Wifi Config: {}", ap.ssid);
-                out.push(config);
-            }
-            seen.push(ap.ssid.as_str());
-        }
-    }
-    Ok(out)
 }
 
 fn connect_wifi(wifi: &mut EspWifi, config: &WifiConfig, timeout_ms: u32) -> anyhow::Result<bool> {
@@ -387,7 +241,7 @@ fn start_http_server<'a>() -> anyhow::Result<EspHttpServer<'a>> {
     server.fn_handler("/delete/*", http::Method::Get, |req| {
         log::info!("DELETE: {:?}", req.uri());
         let ssid = req.uri().split('/').next_back().unwrap_or("").to_string();
-        match delete_wifi_config(&ssid) {
+        match APStore::delete_wifi_config(&ssid) {
             Ok(_) => {
                 log::info!("Successfully deleted SSID: {}", ssid);
                 req.into_response(302, Some("Successfully deleted SSID"), &[("Location", "/")])?;
@@ -409,7 +263,7 @@ fn start_http_server<'a>() -> anyhow::Result<EspHttpServer<'a>> {
         match serde_urlencoded::from_bytes(&buf[0..len]) {
             Ok(config) => {
                 // Save the WiFi configuration
-                match save_wifi_config(&config) {
+                match APStore::save_wifi_config(&config) {
                     Ok(_) => {
                         log::info!("Successfully saved SSID: {}", config.ssid);
                         req.into_response(

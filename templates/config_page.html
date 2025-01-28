@@ -31,6 +31,11 @@
                 margin: 20px 0;
                 font-size: 14px;
             }
+            table.rounded {
+                border-radius: 8px; /* Add rounded corners */
+                overflow: hidden; /* Ensure the corners are rounded properly */
+                border: 1px;
+            }
             table,
             th,
             td {
@@ -96,6 +101,7 @@
                 margin: 4px 2px;
                 cursor: pointer;
                 font-size: 14px;
+                border: none;
             }
             .button.delete {
                 background-color: #f44336;
@@ -114,7 +120,7 @@
         <div class="container">
             <!-- List of Known APs -->
             <h3>Visible APs</h3>
-            <table>
+            <table class="rounded">
                 <thead>
                     <tr>
                         <th style="width: 50%">SSID</th>
@@ -135,7 +141,7 @@
                 </tbody>
             </table>
             <h3>Known APs</h3>
-            <table>
+            <table class="rounded">
                 <thead>
                     <tr>
                         <th style="width: 80%">SSID</th>
@@ -155,21 +161,51 @@
                     {% endfor %}
                 </tbody>
             </table>
-
             <!-- Add New AP Form -->
-            <div class="form-container">
-                <h2>Wi-Fi Configuration</h2>
-                <form action="/add" method="post">
-                    <label for="ssid">SSID:</label>
-                    <input type="text" id="ssid" name="ssid" required />
-                    <label for="password">Password:</label>
-                    <input
-                        type="password"
-                        id="password"
-                        name="password"
-                        required
-                    />
-                    <button type="submit">Add</button>
+            <div class="form-container" style="max-width: 800px">
+                <h2>Add AP</h2>
+                <form
+                    action="/add"
+                    method="post"
+                    style="display: flex; align-items: center; gap: 10px"
+                >
+                    <div
+                        style="
+                            display: flex;
+                            align-items: center;
+                            gap: 10px;
+                            flex: 1;
+                        "
+                    >
+                        <label for="ssid">SSID:</label>
+                        <input
+                            type="text"
+                            id="ssid"
+                            name="ssid"
+                            required
+                            style="flex: 1"
+                        />
+                    </div>
+                    <div
+                        style="
+                            display: flex;
+                            align-items: center;
+                            gap: 10px;
+                            flex: 1;
+                        "
+                    >
+                        <label for="password">Password:</label>
+                        <input
+                            type="password"
+                            id="password"
+                            name="password"
+                            required
+                            style="flex: 1"
+                        />
+                    </div>
+                    <button class="button" type="submit" style="flex: 0 0 auto">
+                        Add
+                    </button>
                 </form>
             </div>
         </div>
