@@ -82,8 +82,8 @@ fn main() -> anyhow::Result<()> {
         true
     });
 
-    save_wifi_config(&WifiConfig::new("CR-GUEST", "caribou-gnu")?)?;
-    save_wifi_config(&WifiConfig::new("TEST", "test")?)?;
+    //save_wifi_config(&WifiConfig::new("CR-GUEST", "caribou-gnu")?)?;
+    //save_wifi_config(&WifiConfig::new("TEST", "test")?)?;
 
     let mut wifi: EspWifi<'_> = EspWifi::new(
         peripherals.modem,
@@ -352,7 +352,7 @@ fn start_http_server<'a>() -> anyhow::Result<EspHttpServer<'a>> {
 
     server.fn_handler("/hello", http::Method::Get, |req| {
         let mut response = req.into_ok_response()?;
-        response.write("Hello from ESP32-C3!".as_bytes())?;
+        response.write("Hello from ESP32-C3!\n".as_bytes())?;
         Ok::<(), anyhow::Error>(())
     })?;
 
@@ -405,45 +405,30 @@ fn start_http_server<'a>() -> anyhow::Result<EspHttpServer<'a>> {
         // Read the body of the request
         let mut buf = [0_u8; 256];
         let len = req.read(&mut buf)?;
-        let body = std::str::from_utf8(&buf[..len])?;
 
-        // Parse the form data (assuming URL-encoded format)
-        let params: Vec<&str> = body.split('&').collect();
-        let mut ssid = None;
-        let mut password = None;
-
-        for param in params {
-            let key_value: Vec<&str> = param.split('=').collect();
-            if key_value.len() == 2 {
-                match key_value[0] {
-                    "ssid" => ssid = Some(key_value[1]),
-                    "password" => password = Some(key_value[1]),
-                    _ => (),
+        match serde_urlencoded::from_bytes(&buf[0..len]) {
+            Ok(config) => {
+                // Save the WiFi configuration
+                match save_wifi_config(&config) {
+                    Ok(_) => {
+                        log::info!("Successfully saved SSID: {}", config.ssid);
+                        req.into_response(
+                            302,
+                            Some("Successfully saved SSID"),
+                            &[("Location", "/")],
+                        )?;
+                    }
+                    Err(e) => {
+                        log::error!("Failed to save SSID: {} - {}", config.ssid, e);
+                        req.into_response(302, Some("Failed to save SSID"), &[("Location", "/")])?;
+                    }
                 }
             }
-        }
-
-        // Validate the input
-        if let (Some(ssid), Some(password)) = (ssid, password) {
-            let ssid = urlencoding::decode(ssid)?;
-            let password = urlencoding::decode(password)?;
-
-            // Save the WiFi configuration
-            match save_wifi_config(&WifiConfig::new(&ssid, &password)?) {
-                Ok(_) => {
-                    log::info!("Successfully saved SSID: {}", ssid);
-                    req.into_response(302, Some("Successfully saved SSID"), &[("Location", "/")])?;
-                }
-                Err(e) => {
-                    log::error!("Failed to save SSID: {} - {}", ssid, e);
-                    req.into_response(302, Some("Failed to save SSID"), &[("Location", "/")])?;
-                }
+            Err(_) => {
+                log::error!("Invalid form data");
+                req.into_response(400, Some("Invalid form data"), &[])?;
             }
-        } else {
-            log::error!("Invalid form data");
-            req.into_response(400, Some("Invalid form data"), &[])?;
         }
-
         Ok::<(), anyhow::Error>(())
     })?;
 
