@@ -4,12 +4,13 @@ use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
 
 use crate::hash::hash_ssid;
-use crate::wifi::WifiConfig;
+use crate::wifi::APConfig;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct KnownAPs(pub Vec<String<32>>);
 
 static KNOWN_APS_LEN: usize = 2048;
+static SAVED_AP_LEN: usize = 256;
 pub static KNOWN_APS: Mutex<KnownAPs> = Mutex::new(KnownAPs(Vec::new()));
 pub static NVS: Mutex<Option<EspNvs<NvsDefault>>> = Mutex::new(None);
 
@@ -54,7 +55,7 @@ impl APStore {
         Ok(())
     }
 
-    pub fn save_wifi_config(c: &WifiConfig) -> anyhow::Result<()> {
+    pub fn add_ap(c: &APConfig) -> anyhow::Result<()> {
         let mut nvs = NVS.lock().unwrap();
         let nvs = nvs.as_mut().ok_or(anyhow::anyhow!("NVS not initialized"))?;
 
@@ -92,7 +93,7 @@ impl APStore {
         Ok(())
     }
 
-    pub fn delete_wifi_config(ssid: &str) -> anyhow::Result<()> {
+    pub fn delete_ap(ssid: &str) -> anyhow::Result<()> {
         let mut nvs = NVS.lock().unwrap();
         let nvs = nvs.as_mut().ok_or(anyhow::anyhow!("NVS not initialized"))?;
 
@@ -121,16 +122,26 @@ impl APStore {
         *aps = known_aps;
         Ok(())
     }
-    pub fn get_wifi_config(ssid: &str) -> anyhow::Result<Option<WifiConfig>> {
+    pub fn get_ap_config(ssid: &str) -> anyhow::Result<Option<APConfig>> {
         let nvs = NVS.lock().unwrap();
         let nvs = nvs.as_ref().ok_or(anyhow::anyhow!("NVS not initialized"))?;
-        let mut data = [0_u8; KNOWN_APS_LEN];
+        let mut data = [0_u8; SAVED_AP_LEN];
         if let Ok(Some(data)) = nvs.get_raw(hash_ssid(ssid).as_str(), &mut data) {
-            let config: WifiConfig = serde_json::from_slice(data)?;
+            let config: APConfig = serde_json::from_slice(data)?;
             log::info!("Found Wifi Config: {}", ssid);
             Ok(Some(config))
         } else {
             Ok(None)
+        }
+    }
+    pub fn get_known_aps() -> anyhow::Result<Vec<String<32>>> {
+        let nvs = NVS.lock().unwrap();
+        let nvs = nvs.as_ref().ok_or(anyhow::anyhow!("NVS not initialized"))?;
+        let mut data = [0_u8; KNOWN_APS_LEN];
+        if let Ok(Some(data)) = nvs.get_raw("KNOWN_APS", &mut data) {
+            Ok(serde_json::from_slice(data)?)
+        } else {
+            Err(anyhow::anyhow!("Error retreiving KNOWN_APS"))
         }
     }
 }
