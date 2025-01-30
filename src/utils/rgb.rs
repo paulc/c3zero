@@ -1,5 +1,6 @@
 use anyhow::{bail, Result};
 
+#[derive(Clone, Debug)]
 pub struct Rgb {
     r: u8,
     g: u8,
@@ -44,6 +45,6 @@ impl From<Rgb> for u32 {
     /// 7      0 7      0 7      0
     /// 00000010 00000001 00000100
     fn from(rgb: Rgb) -> Self {
-        ((rgb.g as u32) << 16) | ((rgb.r as u32) << 8) | rgb.b as u32
+        ((rgb.r as u32) << 16) | ((rgb.g as u32) << 8) | rgb.b as u32
     }
 }
