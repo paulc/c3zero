@@ -1,6 +1,6 @@
 use anyhow::{bail, Result};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct Rgb {
     r: u8,
     g: u8,

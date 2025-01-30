@@ -23,8 +23,8 @@ pub struct StatusLed {
 impl StatusLed {
     pub fn new(led: esp_idf_hal::gpio::AnyOutputPin, channel: Ws2812RmtChannel) -> Result<Self> {
         let mut led = Ws2812Rmt::new(led, channel)?;
+        let mut status = LedState::Off;
         let status_thread = thread::spawn(move || loop {
-            let mut status = LedState::Off;
             let _ = STATUS.try_lock().and_then(|s| {
                 status = (*s).clone();
                 Ok(())
@@ -49,7 +49,7 @@ impl StatusLed {
                 .join()
                 .map_err(|e| anyhow!("Thread panicked: {:?}", e))?
         } else {
-            Ok(()) // Handle the case where the thread is already joined or not started
+            anyhow::bail!("Thread not running")
         }
     }
 
