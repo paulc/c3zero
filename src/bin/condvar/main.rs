@@ -14,12 +14,15 @@ fn main() -> Result<()> {
     esp_idf_hal::sys::link_patches();
 
     let guard = Arc::new((Mutex::new(0), Condvar::new()));
-    let guard_thread = guard.clone();
+
+    // Initialise static GUARD (use in RX thread)
     {
         let mut guard_static = GUARD.lock().unwrap();
         *guard_static = Some(guard.clone());
     }
 
+    // We move this guard into the TX thread
+    let guard_thread = guard.clone();
     let _tx = thread::spawn(move || {
         let (lock, cvar) = &*guard_thread;
         loop {
