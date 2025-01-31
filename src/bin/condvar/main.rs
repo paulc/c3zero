@@ -15,16 +15,19 @@ fn main() -> Result<()> {
 
     let guard = Arc::new((Mutex::new(0), Condvar::new()));
 
-    // Initialise static GUARD (use in RX thread)
+    // Initialise static GUARD (use in TX thread)
     {
         let mut guard_static = GUARD.lock().unwrap();
         *guard_static = Some(guard.clone());
     }
 
-    // We move this guard into the TX thread
-    let guard_thread = guard.clone();
     let _tx = thread::spawn(move || {
-        let (lock, cvar) = &*guard_thread;
+        // Lock the GUARD to access its contents
+        let guard = GUARD.lock().unwrap();
+        // Unwrap the Option to get the Arc<(Mutex<bool>, Condvar)>
+        let guard = guard.as_ref().unwrap();
+        // Dereference the Arc to get the tuple (Mutex<bool>, Condvar)
+        let (lock, cvar) = &**guard;
         loop {
             {
                 let mut counter = lock.lock().unwrap();
@@ -37,14 +40,10 @@ fn main() -> Result<()> {
         }
     });
 
-    let _rx = thread::spawn(|| {
-        // Lock the GUARD to access its contents
-        let guard = GUARD.lock().unwrap();
-        // Unwrap the Option to get the Arc<(Mutex<bool>, Condvar)>
-        let guard = guard.as_ref().unwrap();
-        // Dereference the Arc to get the tuple (Mutex<bool>, Condvar)
-        let (lock, cvar) = &**guard;
-
+    // We move this guard into the RX thread
+    let guard_thread = guard.clone();
+    let _rx = thread::spawn(move || {
+        let (lock, cvar) = &*guard_thread;
         loop {
             let started = lock.lock().unwrap();
             let result = cvar
