@@ -25,10 +25,7 @@ impl StatusLed {
         let mut led = Ws2812Rmt::new(led, channel)?;
         let mut status = LedState::Off;
         let status_thread = thread::spawn(move || loop {
-            let _ = STATUS.try_lock().and_then(|s| {
-                status = (*s).clone();
-                Ok(())
-            });
+            let _ = STATUS.try_lock().map(|s| status = (*s).clone());
             match status {
                 LedState::Off => led.set(Rgb::new(0, 0, 0))?,
                 LedState::On(rgb) => led.set(rgb)?,
