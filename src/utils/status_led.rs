@@ -6,7 +6,7 @@ use std::thread::{self, JoinHandle};
 use crate::rgb::Rgb;
 use crate::ws2812_rmt::{Ws2812Rmt, Ws2812RmtChannel};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum LedState {
     Off,
     On(Rgb),
