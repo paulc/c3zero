@@ -1,5 +1,6 @@
 use anyhow::{anyhow, Error, Result};
 use esp_idf_hal::{delay::FreeRtos, gpio::OutputPin, prelude::Peripherals};
+use esp_idf_sys as _;
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
@@ -18,7 +19,7 @@ pub enum LedState {
 type StatusGuard = (Mutex<LedState>, Condvar);
 static STATUS_GUARD: Mutex<Option<Arc<StatusGuard>>> = Mutex::new(None);
 
-const STATUS_POLL_MS: u32 = 100;
+const STATUS_POLL_MS: u32 = 50; // Minimum CVAR wait time seems to be c.20ms
 
 pub struct StatusLed {
     status_thread: Option<JoinHandle<Result<(), Error>>>,
@@ -27,46 +28,56 @@ pub struct StatusLed {
 impl StatusLed {
     pub fn new(led: esp_idf_hal::gpio::AnyOutputPin, channel: Ws2812RmtChannel) -> Result<Self> {
         let mut led = Ws2812Rmt::new(led, channel)?;
-
         let guard = Arc::new((Mutex::new(LedState::Off), Condvar::new()));
-        // Initialise static GUARD (use for TX)
+        // Initialise static GUARD with clone (use for TX)
         {
             let mut guard_static = STATUS_GUARD.lock().unwrap();
             *guard_static = Some(guard.clone());
         }
-
-        let guard_thread = guard.clone();
-
+        // Move guard into thread
         let rx = thread::spawn(move || {
-            let (lock, cvar) = &*guard_thread;
+            let (ledstate, cvar) = &*guard;
             let mut status = LedState::Off;
-            let mut cycle = (0_u32, 0_u32); // Current steps, Switch steps
             let mut wheel_hue = 0_u32;
+            let mut flash_timer = 0_u32;
             let mut flash_state = false;
+            let mut start_ticks = unsafe { esp_idf_sys::xTaskGetTickCount() };
             loop {
                 // Wait for CVAR timeout
-                let started = lock.lock().unwrap();
+                let started = ledstate.lock().unwrap();
                 let result = cvar
                     .wait_timeout(started, Duration::from_millis(STATUS_POLL_MS as u64))
                     .unwrap();
+
+                // Update tick counter
+                let now = unsafe { esp_idf_sys::xTaskGetTickCount() };
+
                 if !result.1.timed_out() {
+                    log::info!("MESSAGE:: {:?} {}", *result.0, *result.0 == status);
                     // Update status
                     status = result.0.clone();
                     match status {
-                        LedState::Flash(_, ms) => cycle = (0, ms / STATUS_POLL_MS),
+                        LedState::Flash(_, ms) => {
+                            flash_timer = ms / 2;
+                            start_ticks = now;
+                        }
                         LedState::Wheel(_) => wheel_hue = 0,
                         _ => {}
                     }
                 }
+
+                // Elapsed time in ms since last state change
+                let elapsed = (now - start_ticks) * 1000 / esp_idf_sys::configTICK_RATE_HZ;
+
                 // Handle LED output
                 match status {
                     LedState::Off => led.set(Rgb::new(0, 0, 0))?,
                     LedState::On(rgb) => led.set(rgb)?,
                     LedState::Flash(rgb, _) => {
-                        cycle.0 += 1;
-                        if cycle.0 > cycle.1 {
+                        if elapsed >= flash_timer {
+                            log::info!("FLASH: {}", elapsed);
+                            start_ticks = now;
                             flash_state = !flash_state;
-                            cycle.0 = 0;
                         }
                         match flash_state {
                             true => led.set(rgb)?,
@@ -106,12 +117,14 @@ impl StatusLed {
             .as_ref()
             .ok_or(anyhow::anyhow!("STATUS_GUARD empty"))?;
         // Dereference the Arc to get the tuple (Mutex<bool>, Condvar)
-        let (lock, cvar) = &**guard;
-        let mut s = lock
+        let (ledstate, cvar) = &**guard;
+        // Lock ledstate to get contents
+        let mut s = ledstate
             .lock()
             .map_err(|_| anyhow::anyhow!("Cant lock LED_STATE"))?;
+        // Update status
         *s = status;
-        // We notify the condvar that the value has changed.
+        // Notify the condvar that the value has changed.
         cvar.notify_one();
         Ok(())
     }
@@ -145,7 +158,7 @@ fn main() -> Result<()> {
             (LedState::Wheel(10), 5000),
             (LedState::Off, 1000),
         ] {
-            log::info!(">> {:?}", state);
+            log::info!(">> {:?} [{}ms]", state, delay);
             StatusLed::update(state)?;
             FreeRtos::delay_ms(delay);
         }
