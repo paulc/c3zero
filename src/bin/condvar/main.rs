@@ -75,7 +75,7 @@ impl StatusLed {
                     LedState::On(rgb) => led.set(rgb)?,
                     LedState::Flash(rgb, _) => {
                         if elapsed >= flash_timer {
-                            log::info!("FLASH: {}", elapsed);
+                            // log::info!("FLASH: {}", elapsed);
                             start_ticks = now;
                             flash_state = !flash_state;
                         }

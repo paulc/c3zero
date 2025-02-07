@@ -21,10 +21,10 @@ impl Ws2812Rmt<'_> {
         let color: u32 = rgb.into();
         let ticks_hz = self.tx.counter_clock()?;
         let (t0h, t0l, t1h, t1l) = (
-            Pulse::new_with_duration(ticks_hz, PinState::High, &Duration::from_nanos(350))?,
-            Pulse::new_with_duration(ticks_hz, PinState::Low, &Duration::from_nanos(800))?,
-            Pulse::new_with_duration(ticks_hz, PinState::High, &Duration::from_nanos(700))?,
-            Pulse::new_with_duration(ticks_hz, PinState::Low, &Duration::from_nanos(600))?,
+            Pulse::new_with_duration(ticks_hz, PinState::High, &Duration::from_nanos(400))?,
+            Pulse::new_with_duration(ticks_hz, PinState::Low, &Duration::from_nanos(850))?,
+            Pulse::new_with_duration(ticks_hz, PinState::High, &Duration::from_nanos(800))?,
+            Pulse::new_with_duration(ticks_hz, PinState::Low, &Duration::from_nanos(450))?,
         );
         let mut signal = FixedLengthSignal::<24>::new();
         for i in (0..24).rev() {
