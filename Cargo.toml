@@ -15,7 +15,7 @@ name = "rmt"
 harness = false # do not use the built in cargo test harness -> resolve rust-analyzer errors
 
 [[bin]]
-name = "condvar"
+name = "status"
 harness = false # do not use the built in cargo test harness -> resolve rust-analyzer errors
 
 [profile.release]
