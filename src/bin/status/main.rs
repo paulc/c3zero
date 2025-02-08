@@ -15,26 +15,44 @@ fn main() -> Result<()> {
     let led = peripherals.pins.gpio10.downgrade_output();
     let channel = peripherals.rmt.channel0;
 
-    let _status = Status::new(led, channel)?;
+    let mut status = Status::new(led, channel)?;
 
-    loop {
-        for (state, delay) in [
-            (LedState::On(Rgb::new(255, 0, 0)), 500),
-            (LedState::On(Rgb::new(0, 255, 0)), 500),
-            (LedState::On(Rgb::new(0, 0, 255)), 500),
-            (LedState::Off, 1000),
-            (LedState::Flash(Rgb::new(255, 0, 0), 500), 5000),
-            (LedState::Off, 1000),
-            (LedState::Flash(Rgb::new(0, 255, 0), 100), 5000),
-            (LedState::Off, 1000),
-            (LedState::Flash(Rgb::new(0, 0, 255), 1000), 5000),
-            (LedState::Off, 1000),
-            (LedState::Wheel(10), 5000),
-            (LedState::Off, 1000),
-        ] {
-            log::info!(">> {:?} [{}ms]", state, delay);
-            Status::update(state)?;
-            FreeRtos::delay_ms(delay);
-        }
+    for (state, delay) in [
+        (LedState::On(Rgb::new(255, 0, 0)), 500),
+        (LedState::On(Rgb::new(0, 255, 0)), 500),
+        (LedState::On(Rgb::new(0, 0, 255)), 500),
+        (LedState::Off, 500),
+        (LedState::Flash(Rgb::new(255, 0, 0), 500), 5000),
+        (LedState::Off, 500),
+        (LedState::Flash(Rgb::new(0, 255, 0), 100), 5000),
+        (LedState::Off, 500),
+        (LedState::Flash(Rgb::new(0, 0, 255), 1000), 5000),
+        (LedState::Off, 500),
+        (LedState::Wheel(10), 2000),
+        (LedState::Off, 2000),
+        (
+            LedState::Sequence(vec![
+                (Rgb::new(255, 0, 0), 250),
+                (Rgb::new(0, 0, 0), 250),
+                (Rgb::new(0, 255, 0), 500),
+                (Rgb::new(0, 0, 0), 250),
+                (Rgb::new(0, 0, 255), 1000),
+                (Rgb::new(0, 0, 0), 250),
+            ]),
+            10000,
+        ),
+    ] {
+        log::info!(">> {:?} [{}ms]", state, delay);
+        Status::update(state)?;
+        FreeRtos::delay_ms(delay);
     }
+
+    Status::update(LedState::Sequence(vec![
+        (Rgb::new(255, 0, 0), 500),
+        (Rgb::new(0, 255, 0), 250),
+        (Rgb::new(0, 0, 255), 250),
+    ]))?;
+
+    status.join()?;
+    Ok(())
 }

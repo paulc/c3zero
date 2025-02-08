@@ -13,6 +13,7 @@ pub enum LedState {
     On(Rgb),
     Flash(Rgb, u32),
     Wheel(u32),
+    Sequence(Vec<(Rgb, u32)>),
 }
 
 type StatusGuard = (Mutex<LedState>, Condvar);
@@ -38,8 +39,9 @@ impl Status {
             let (ledstate, cvar) = &*guard;
             let mut status = LedState::Off;
             let mut wheel_hue = 0_u32;
-            let mut flash_timer = 0_u32;
+            let mut timer = 0_u32;
             let mut flash_state = false;
+            let mut sequence_state = 0_usize;
             let mut start_ticks = unsafe { esp_idf_sys::xTaskGetTickCount() };
             loop {
                 // Wait for CVAR timeout
@@ -56,9 +58,19 @@ impl Status {
                     // Update status
                     status = result.0.clone();
                     match status {
-                        LedState::Flash(_, ms) => {
-                            flash_timer = ms / 2;
+                        LedState::Flash(rgb, ms) => {
+                            timer = ms / 2;
                             start_ticks = now;
+                            flash_state = true;
+                            led.set(rgb)?;
+                        }
+                        LedState::Sequence(ref seq) => {
+                            if !seq.is_empty() {
+                                timer = seq[0].1;
+                                led.set(seq[0].0)?;
+                                sequence_state = 0;
+                                start_ticks = now;
+                            }
                         }
                         LedState::Wheel(_) => wheel_hue = 0,
                         _ => {}
@@ -73,14 +85,23 @@ impl Status {
                     LedState::Off => led.set(Rgb::new(0, 0, 0))?,
                     LedState::On(rgb) => led.set(rgb)?,
                     LedState::Flash(rgb, _) => {
-                        if elapsed >= flash_timer {
+                        if elapsed >= timer {
                             // log::info!("FLASH: {}", elapsed);
                             start_ticks = now;
                             flash_state = !flash_state;
+                            match flash_state {
+                                true => led.set(rgb)?,
+                                false => led.set(Rgb::new(0, 0, 0))?,
+                            }
                         }
-                        match flash_state {
-                            true => led.set(rgb)?,
-                            false => led.set(Rgb::new(0, 0, 0))?,
+                    }
+                    LedState::Sequence(ref seq) => {
+                        if elapsed >= timer {
+                            // log::info!("FLASH: {}", elapsed);
+                            start_ticks = now;
+                            sequence_state = (sequence_state + 1) % seq.len();
+                            timer = seq[sequence_state].1;
+                            led.set(seq[sequence_state].0)?;
                         }
                     }
                     LedState::Wheel(step) => {
