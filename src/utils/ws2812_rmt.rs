@@ -73,7 +73,7 @@ impl<'a> Ws2812Rmt<'a> {
     }
     pub fn set<T>(&mut self, colours: T) -> Result<()>
     where
-        T: AsRef<[Rgb]>,
+        T: IntoIterator<Item = Rgb>,
     {
         self.signal.clear();
         let ticks_hz = self.tx.counter_clock()?;
@@ -83,7 +83,7 @@ impl<'a> Ws2812Rmt<'a> {
             Pulse::new_with_duration(ticks_hz, PinState::High, &Duration::from_nanos(T1H))?,
             Pulse::new_with_duration(ticks_hz, PinState::Low, &Duration::from_nanos(T1L))?,
         );
-        for rgb in colours.as_ref() {
+        for rgb in colours {
             // RGB or GRB
             let colour: u32 = rgb.to_u32(self.format);
             for i in (0..24).rev() {

@@ -5,7 +5,7 @@ use esp_idf_hal::{delay::FreeRtos, gpio::OutputPin, prelude::Peripherals};
 use c3zero::rgb::{Rgb, RgbLayout};
 use c3zero::ws2812_rmt::{Ws2812Rmt, Ws2812RmtSingle};
 
-pub fn main() -> Result<()> {
+fn main() -> Result<()> {
     esp_idf_hal::sys::link_patches();
 
     let peripherals = Peripherals::take()?;
@@ -39,8 +39,10 @@ pub fn main() -> Result<()> {
                     display[i] = c;
                     ws2812.set(display)?;
                     ws2812_board.set(c)?;
-                    FreeRtos::delay_ms(50);
+                    // FreeRtos::delay_ms(1);
                 }
+                let display = [Rgb::new(0, 0, 0); 64];
+                ws2812.set(display)?;
             }
             FreeRtos::delay_ms(1000);
         }
