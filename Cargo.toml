@@ -27,7 +27,7 @@ opt-level = "z"
 
 [features]
 default = []
-rmt_single = []
+ws2812_matrix = []
 
 experimental = ["esp-idf-svc/experimental"]
 

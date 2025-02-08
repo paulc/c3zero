@@ -4,7 +4,7 @@ use std::sync::{Arc, Condvar, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
-use crate::rgb::Rgb;
+use crate::rgb::{Rgb, RgbLayout};
 use crate::ws2812_rmt::{Ws2812RmtChannel, Ws2812RmtSingle};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -26,8 +26,12 @@ pub struct Status {
 }
 
 impl Status {
-    pub fn new(led: esp_idf_hal::gpio::AnyOutputPin, channel: Ws2812RmtChannel) -> Result<Self> {
-        let mut led = Ws2812RmtSingle::new(led, channel)?;
+    pub fn new(
+        led: esp_idf_hal::gpio::AnyOutputPin,
+        channel: Ws2812RmtChannel,
+        format: RgbLayout,
+    ) -> Result<Self> {
+        let mut led = Ws2812RmtSingle::new(led, channel, format)?;
         let guard = Arc::new((Mutex::new(LedState::Off), Condvar::new()));
         // Initialise static GUARD with clone (use for TX)
         {

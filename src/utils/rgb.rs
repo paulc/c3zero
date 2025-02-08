@@ -1,6 +1,12 @@
 use anyhow::{bail, Result};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RgbLayout {
+    Rgb,
+    Grb,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Rgb {
     r: u8,
     g: u8,
@@ -35,16 +41,10 @@ impl Rgb {
             b: ((b + m) * 255.0) as u8,
         })
     }
-}
-
-impl From<Rgb> for u32 {
-    /// Convert RGB to u32 color value
-    ///
-    /// e.g. rgb: (1,2,4)
-    /// G        R        B
-    /// 7      0 7      0 7      0
-    /// 00000010 00000001 00000100
-    fn from(rgb: Rgb) -> Self {
-        ((rgb.r as u32) << 16) | ((rgb.g as u32) << 8) | rgb.b as u32
+    pub fn to_u32(&self, format: RgbLayout) -> u32 {
+        match format {
+            RgbLayout::Rgb => ((self.r as u32) << 16) | ((self.g as u32) << 8) | self.b as u32,
+            RgbLayout::Grb => ((self.g as u32) << 16) | ((self.r as u32) << 8) | self.b as u32,
+        }
     }
 }

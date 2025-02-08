@@ -1,7 +1,7 @@
 use anyhow::Result;
 use esp_idf_hal::{delay::FreeRtos, gpio::OutputPin, prelude::Peripherals};
 
-use c3zero::rgb::Rgb;
+use c3zero::rgb::{Rgb, RgbLayout};
 use c3zero::status::{LedState, Status};
 
 fn main() -> Result<()> {
@@ -15,7 +15,7 @@ fn main() -> Result<()> {
     let led = peripherals.pins.gpio10.downgrade_output();
     let channel = peripherals.rmt.channel0;
 
-    let mut status = Status::new(led, channel)?;
+    let mut status = Status::new(led, channel, RgbLayout::Rgb)?;
 
     for (state, delay) in [
         (LedState::On(Rgb::new(255, 0, 0)), 500),

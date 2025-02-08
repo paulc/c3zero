@@ -2,7 +2,7 @@ use anyhow::Result;
 use esp_idf_hal::rmt::{config::TransmitConfig, FixedLengthSignal, PinState, Pulse, TxRmtDriver};
 use std::time::Duration;
 
-use crate::rgb::Rgb;
+use crate::rgb::{Rgb, RgbLayout};
 
 // ws2812 timings
 const T0H: u64 = 400;
@@ -12,21 +12,27 @@ const T1L: u64 = 450;
 
 pub type Ws2812RmtChannel = esp_idf_hal::rmt::CHANNEL0;
 
-// Simplified driver for single WS2812 on RMT Channel 0
+// Simplified driver for single WS2812 on RMT Channel 0 - typically for onboard LED
 // (avoids thread lifetime complications when used with Status)
 pub struct Ws2812RmtSingle<'a> {
     tx: esp_idf_hal::rmt::TxRmtDriver<'a>,
+    format: RgbLayout,
 }
 
 impl Ws2812RmtSingle<'_> {
-    pub fn new(led: esp_idf_hal::gpio::AnyOutputPin, channel: Ws2812RmtChannel) -> Result<Self> {
+    pub fn new(
+        led: esp_idf_hal::gpio::AnyOutputPin,
+        channel: Ws2812RmtChannel,
+        format: RgbLayout,
+    ) -> Result<Self> {
         let config = TransmitConfig::new().clock_divider(1);
         let tx = TxRmtDriver::new(channel, led, &config)?;
-        Ok(Self { tx })
+        Ok(Self { tx, format })
     }
 
     pub fn set(&mut self, rgb: Rgb) -> Result<()> {
-        let colour: u32 = rgb.into();
+        // Onboard ws2812 is RGB format
+        let colour: u32 = rgb.to_u32(self.format);
         let ticks_hz = self.tx.counter_clock()?;
         let (t0h, t0l, t1h, t1l) = (
             Pulse::new_with_duration(ticks_hz, PinState::High, &Duration::from_nanos(T0H))?,
@@ -50,6 +56,7 @@ impl Ws2812RmtSingle<'_> {
 pub struct Ws2812Rmt<'a> {
     tx: esp_idf_hal::rmt::TxRmtDriver<'a>,
     signal: esp_idf_hal::rmt::VariableLengthSignal,
+    format: RgbLayout,
 }
 
 impl<'a> Ws2812Rmt<'a> {
@@ -60,9 +67,9 @@ impl<'a> Ws2812Rmt<'a> {
     // let config = TransmitConfig::new().clock_divider(1);
     // let tx = TxRmtDriver::new(channel, led, &config)?;
     //
-    pub fn new(tx: TxRmtDriver<'a>, n: usize) -> Self {
+    pub fn new(tx: TxRmtDriver<'a>, n: usize, format: RgbLayout) -> Self {
         let signal = esp_idf_hal::rmt::VariableLengthSignal::with_capacity(n);
-        Self { tx, signal }
+        Self { tx, signal, format }
     }
     pub fn set<T>(&mut self, colours: T) -> Result<()>
     where
@@ -77,7 +84,8 @@ impl<'a> Ws2812Rmt<'a> {
             Pulse::new_with_duration(ticks_hz, PinState::Low, &Duration::from_nanos(T1L))?,
         );
         for rgb in colours.as_ref() {
-            let colour: u32 = (*rgb).into();
+            // RGB or GRB
+            let colour: u32 = rgb.to_u32(self.format);
             for i in (0..24).rev() {
                 if (colour >> i) & 1 == 0 {
                     self.signal.push([&t0h, &t0l])?;
