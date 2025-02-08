@@ -27,6 +27,7 @@ opt-level = "z"
 
 [features]
 default = []
+rmt_single = []
 
 experimental = ["esp-idf-svc/experimental"]
 

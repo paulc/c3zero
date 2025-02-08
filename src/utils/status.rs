@@ -5,7 +5,7 @@ use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 use crate::rgb::Rgb;
-use crate::ws2812_rmt::{Ws2812Rmt, Ws2812RmtChannel};
+use crate::ws2812_rmt::{Ws2812RmtChannel, Ws2812RmtSingle};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum LedState {
@@ -27,7 +27,7 @@ pub struct Status {
 
 impl Status {
     pub fn new(led: esp_idf_hal::gpio::AnyOutputPin, channel: Ws2812RmtChannel) -> Result<Self> {
-        let mut led = Ws2812Rmt::new(led, channel)?;
+        let mut led = Ws2812RmtSingle::new(led, channel)?;
         let guard = Arc::new((Mutex::new(LedState::Off), Condvar::new()));
         // Initialise static GUARD with clone (use for TX)
         {
