@@ -46,25 +46,23 @@ pub struct Ws2812MatrixIterator<'a> {
     index: usize,
 }
 
-impl<'a> Iterator for Ws2812MatrixIterator<'a> {
+impl Iterator for Ws2812MatrixIterator<'_> {
     type Item = Rgb;
     fn next(&mut self) -> Option<Self::Item> {
         if self.index < WIDTH * HEIGHT {
             let out = match self.orientation {
                 Orientation::North => self.leds[self.index],
                 Orientation::East => {
-                    // XXX Not Working
                     let (x, y) = (self.index % WIDTH, self.index / WIDTH);
-                    self.leds[y * WIDTH + (HEIGHT - 1 - x)]
+                    self.leds[(HEIGHT - y - 1) + x * HEIGHT]
                 }
                 Orientation::South => {
                     let (x, y) = (self.index % WIDTH, self.index / WIDTH);
                     self.leds[(WIDTH - x - 1) + (HEIGHT - y - 1) * WIDTH]
                 }
                 Orientation::West => {
-                    // XXX Not Working
                     let (x, y) = (self.index % WIDTH, self.index / WIDTH);
-                    self.leds[x + (HEIGHT - 1 - y) * WIDTH]
+                    self.leds[y + (WIDTH - x - 1) * HEIGHT]
                 }
             };
             self.index += 1;
