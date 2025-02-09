@@ -2,7 +2,7 @@ use anyhow::Result;
 use esp_idf_hal::rmt::{config::TransmitConfig, TxRmtDriver};
 use esp_idf_hal::{delay::FreeRtos, gpio::OutputPin, prelude::Peripherals};
 
-use c3zero::rgb::{Rgb, RgbLayout};
+use c3zero::rgb::{Rgb, RgbLayout, OFF};
 use c3zero::ws2812_matrix::{Orientation, Ws2812Matrix};
 use c3zero::ws2812_rmt::{Ws2812Rmt, Ws2812RmtSingle};
 
@@ -16,7 +16,7 @@ fn main() -> Result<()> {
     let channel = peripherals.rmt.channel0;
     let mut ws2812_board = Ws2812RmtSingle::new(led, channel, RgbLayout::Rgb)?;
     // Turn off onboard LED
-    ws2812_board.set(Rgb::new(0, 0, 0))?;
+    ws2812_board.set(OFF)?;
 
     let led = peripherals.pins.gpio0.downgrade_output();
     let channel = peripherals.rmt.channel1;
@@ -38,7 +38,7 @@ fn main() -> Result<()> {
 fn message(matrix: &mut Ws2812Matrix, ws2812: &mut Ws2812Rmt, msg: &str) -> Result<()> {
     for (c1, c2) in msg.chars().zip(msg.chars().skip(1)) {
         for o in 0..8 {
-            matrix.fill(Rgb::new(0, 0, 0));
+            matrix.fill(OFF);
             matrix.draw_char(c1, Rgb::new(128, 0, 0), -o);
             matrix.draw_char(c2, Rgb::new(128, 0, 0), 8 - o);
             ws2812.set(matrix.iter())?;
