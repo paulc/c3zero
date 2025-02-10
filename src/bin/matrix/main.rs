@@ -1,9 +1,9 @@
-use anyhow::Result;
+use anyhow::{Ok, Result};
 use esp_idf_hal::rmt::{config::TransmitConfig, TxRmtDriver};
 use esp_idf_hal::{delay::FreeRtos, gpio::OutputPin, prelude::Peripherals};
 
-use c3zero::rgb::{Rgb, RgbLayout, OFF};
-use c3zero::ws2812_matrix::{Orientation, Ws2812Matrix};
+use c3zero::matrix::{Matrix, Orientation};
+use c3zero::rgb::{self, Rgb, RgbLayout};
 use c3zero::ws2812_rmt::{Ws2812Rmt, Ws2812RmtSingle};
 
 fn main() -> Result<()> {
@@ -16,40 +16,104 @@ fn main() -> Result<()> {
     let channel = peripherals.rmt.channel0;
     let mut ws2812_board = Ws2812RmtSingle::new(led, channel, RgbLayout::Rgb)?;
     // Turn off onboard LED
-    ws2812_board.set(OFF)?;
+    ws2812_board.set(rgb::OFF)?;
 
     let led = peripherals.pins.gpio0.downgrade_output();
     let channel = peripherals.rmt.channel1;
     let config = TransmitConfig::new().clock_divider(1);
     let tx = TxRmtDriver::new(channel, led, &config)?;
     let mut ws2812 = Ws2812Rmt::new(tx, 64, RgbLayout::Grb);
-    let mut matrix = Ws2812Matrix::new(Orientation::North);
+    let mut matrix = Matrix::new(Orientation::North);
 
-    rotate(&mut matrix, &mut ws2812, 2)?;
-    matrix.set_orientation(Orientation::North);
+    let msg = "Hello, this is a message! ±!@£$%^&*()_+ 01234567890 {}[]:;'|<>?/\\";
 
-    let msg = "Hello There";
     loop {
+        rotate(&mut matrix, &mut ws2812, 2)?;
+        matrix.set_orientation(Orientation::East);
+        scroll(&mut matrix, &mut ws2812, 'Z')?;
+        glyph(&mut matrix, &mut ws2812)?;
         message(&mut matrix, &mut ws2812, msg)?;
-        FreeRtos::delay_ms(500);
+        bitmap(&mut matrix, &mut ws2812)?;
+        FreeRtos::delay_ms(2000);
     }
 }
 
-fn message(matrix: &mut Ws2812Matrix, ws2812: &mut Ws2812Rmt, msg: &str) -> Result<()> {
-    for (c1, c2) in msg.chars().zip(msg.chars().skip(1)) {
+fn bitmap(matrix: &mut Matrix, ws2812: &mut Ws2812Rmt) -> Result<()> {
+    #[rustfmt::skip]
+    let bitmap = [
+        ".ABCD...",
+        "....A...",
+        "....B...",
+        "....C...",
+        "....DCBA",
+        "........",
+        "AB......",
+        "CD......",
+    ];
+    let colourmap = [
+        ('A', rgb::RED),
+        ('B', rgb::GREEN),
+        ('C', rgb::BLUE),
+        ('D', Rgb::new(0, 64, 64)),
+        ('.', rgb::OFF),
+    ];
+
+    matrix.draw_bitmap(&bitmap, &colourmap, 0);
+    ws2812.set(matrix.iter())?;
+    Ok(())
+}
+
+fn glyph(matrix: &mut Matrix, ws2812: &mut Ws2812Rmt) -> Result<()> {
+    #[rustfmt::skip]
+    let glyph = [
+        0b00000001,
+        0b00000010,
+        0b00000100,
+        0b00001000,
+        0b00001000,
+        0b00010100,
+        0b00100010,
+        0b01000001,
+    ];
+
+    for offset in -8..=8 {
+        matrix.fill(rgb::OFF);
+        matrix.draw_glyph(glyph, rgb::BLUE, offset);
+        ws2812.set(matrix.iter())?;
+        FreeRtos::delay_ms(50);
+    }
+    Ok(())
+}
+
+fn scroll(matrix: &mut Matrix, ws2812: &mut Ws2812Rmt, c: char) -> Result<()> {
+    for offset in -8..=8 {
+        matrix.fill(rgb::OFF);
+        matrix.draw_char(c, rgb::GREEN, offset);
+        ws2812.set(matrix.iter())?;
+        FreeRtos::delay_ms(50);
+    }
+    Ok(())
+}
+
+fn message(matrix: &mut Matrix, ws2812: &mut Ws2812Rmt, msg: &str) -> Result<()> {
+    for (c1, c2) in msg
+        .chars()
+        .zip(msg.chars().chain(std::iter::once(' ')).skip(1))
+    {
         for o in 0..8 {
-            matrix.fill(OFF);
-            matrix.draw_char(c1, Rgb::new(128, 0, 0), -o);
-            matrix.draw_char(c2, Rgb::new(128, 0, 0), 8 - o);
+            matrix.fill(rgb::OFF);
+            matrix.draw_char(c1, Rgb::new(64, 0, 0), -o);
+            matrix.draw_char(c2, Rgb::new(64, 0, 0), 8 - o);
             ws2812.set(matrix.iter())?;
-            FreeRtos::delay_ms(100);
+            FreeRtos::delay_ms(50);
         }
     }
     Ok(())
 }
 
-fn rotate(matrix: &mut Ws2812Matrix, ws2812: &mut Ws2812Rmt, count: usize) -> Result<()> {
+fn rotate(matrix: &mut Matrix, ws2812: &mut Ws2812Rmt, count: usize) -> Result<()> {
     // Draw arrow
+    matrix.fill(rgb::OFF);
     for p in [(2, 1), (1, 2), (0, 3)] {
         matrix.set(p, Rgb::new(128, 0, 0));
     }

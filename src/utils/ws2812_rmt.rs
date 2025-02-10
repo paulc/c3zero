@@ -31,7 +31,6 @@ impl Ws2812RmtSingle<'_> {
     }
 
     pub fn set(&mut self, rgb: Rgb) -> Result<()> {
-        // Onboard ws2812 is RGB format
         let colour: u32 = rgb.to_u32(self.format);
         let ticks_hz = self.tx.counter_clock()?;
         let (t0h, t0l, t1h, t1l) = (
@@ -84,7 +83,6 @@ impl<'a> Ws2812Rmt<'a> {
             Pulse::new_with_duration(ticks_hz, PinState::Low, &Duration::from_nanos(T1L))?,
         );
         for rgb in colours {
-            // RGB or GRB
             let colour: u32 = rgb.to_u32(self.format);
             for i in (0..24).rev() {
                 if (colour >> i) & 1 == 0 {
