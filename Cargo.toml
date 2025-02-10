@@ -22,6 +22,10 @@ harness = false # do not use the built in cargo test harness -> resolve rust-ana
 name = "matrix"
 harness = false # do not use the built in cargo test harness -> resolve rust-analyzer errors
 
+[[bin]]
+name = "matrix_1d"
+harness = false # do not use the built in cargo test harness -> resolve rust-analyzer errors
+
 [profile.release]
 opt-level = "s"
 
@@ -32,6 +36,7 @@ opt-level = "z"
 [features]
 default = []
 ws2812_matrix = []
+led_128 = []
 
 experimental = ["esp-idf-svc/experimental"]
 

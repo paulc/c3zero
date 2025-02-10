@@ -5,6 +5,11 @@ use esp_idf_hal::{delay::FreeRtos, gpio::OutputPin, prelude::Peripherals};
 use c3zero::rgb::{Rgb, RgbLayout};
 use c3zero::ws2812_rmt::{Ws2812Rmt, Ws2812RmtSingle};
 
+#[cfg(feature = "led_128")]
+const LEDS: usize = 128;
+#[cfg(not(feature = "led_128"))]
+const LEDS: usize = 64;
+
 fn main() -> Result<()> {
     esp_idf_hal::sys::link_patches();
 
@@ -26,7 +31,7 @@ fn main() -> Result<()> {
         let channel = peripherals.rmt.channel1;
         let config = TransmitConfig::new().clock_divider(1);
         let tx = TxRmtDriver::new(channel, led, &config)?;
-        let mut ws2812 = Ws2812Rmt::new(tx, 64, RgbLayout::Grb);
+        let mut ws2812 = Ws2812Rmt::new(tx, LEDS, RgbLayout::Grb);
         loop {
             for c in [
                 Rgb::new(255, 0, 0),
@@ -34,14 +39,14 @@ fn main() -> Result<()> {
                 Rgb::new(0, 0, 255),
             ] {
                 println!("Colour: {:?}", c);
-                for i in 0..64 {
-                    let mut display = [Rgb::new(0, 0, 0); 64];
+                for i in 0..LEDS {
+                    let mut display = [Rgb::new(0, 0, 0); LEDS];
                     display[i] = c;
                     ws2812.set(display)?;
                     ws2812_board.set(c)?;
                     // FreeRtos::delay_ms(1);
                 }
-                let display = [Rgb::new(0, 0, 0); 64];
+                let display = [Rgb::new(0, 0, 0); LEDS];
                 ws2812.set(display)?;
             }
             FreeRtos::delay_ms(1000);

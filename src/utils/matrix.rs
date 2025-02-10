@@ -13,6 +13,7 @@ pub enum Orientation {
 const WIDTH: usize = 8;
 const HEIGHT: usize = 8;
 
+#[derive(Clone, Debug)]
 pub struct Matrix {
     leds: [Rgb; WIDTH * HEIGHT],
     orientation: Orientation,
@@ -31,37 +32,18 @@ impl Matrix {
         }
     }
     pub fn draw_glyph(&mut self, glyph: [u8; 8], colour: Rgb, offset: i8) {
-        // Glyph is in MSB-LSB format (opposite to char)
         for (y, row) in glyph.into_iter().enumerate() {
-            /*
-            let row = match offset {
-                ..-7 => 0,
-                -7..0 => row << -offset,
-                0 => *row,
-                1..8 => row >> offset,
-                8.. => 0,
-            };
-            */
             for x in 0..8 {
+                // Glyph is in MSB-LSB format (opposite to char)
                 if shift(row.reverse_bits(), offset) & (1 << x) != 0 {
                     self.leds[x + y * HEIGHT] = colour;
                 }
             }
         }
     }
-
     pub fn draw_char(&mut self, c: char, colour: Rgb, offset: i8) {
         if let Some(glyph) = BASIC_FONTS.get(c) {
             for (y, row) in glyph.into_iter().enumerate() {
-                /*
-                let row = match offset {
-                    ..-7 => 0,
-                    -7..0 => row >> -offset,
-                    0 => *row,
-                    1..8 => row << offset,
-                    8.. => 0,
-                };
-                */
                 for x in 0..8 {
                     if shift(row, offset) & (1 << x) != 0 {
                         self.leds[x + y * HEIGHT] = colour;
@@ -88,11 +70,11 @@ impl Matrix {
     pub fn set_orientation(&mut self, orientation: Orientation) {
         self.orientation = orientation;
     }
-    pub fn set(&mut self, xy: (usize, usize), c: Rgb) {
-        self.leds[xy.0 + xy.1 * HEIGHT] = c;
+    pub fn set(&mut self, (x, y): (usize, usize), c: Rgb) {
+        self.leds[x + y * WIDTH] = c;
     }
-    pub fn get(&mut self, xy: (usize, usize)) -> Rgb {
-        self.leds[xy.0 + xy.1 * HEIGHT]
+    pub fn get(&mut self, (x, y): (usize, usize)) -> Rgb {
+        self.leds[x + y * WIDTH]
     }
     pub fn iter(&self) -> MatrixIterator {
         MatrixIterator {
