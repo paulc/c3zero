@@ -58,3 +58,9 @@ impl Rgb {
         }
     }
 }
+
+impl Default for Rgb {
+    fn default() -> Self {
+        OFF
+    }
+}
