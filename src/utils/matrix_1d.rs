@@ -39,6 +39,45 @@ impl Panel {
             self.leds[j] = OFF;
         }
     }
+    pub fn iter(&self) -> PanelIterator<'_> {
+        PanelIterator {
+            panel: self,
+            index: 0,
+        }
+    }
+}
+
+pub struct PanelIterator<'a> {
+    panel: &'a Panel,
+    index: usize,
+}
+
+impl Iterator for PanelIterator<'_> {
+    type Item = Rgb;
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index < PANEL_PIXELS {
+            let (x, y) = (self.index % WIDTH, self.index / WIDTH);
+            let out = match self.panel.orientation {
+                Orientation::North => self.panel.leds[x + y * WIDTH],
+                Orientation::East => {
+                    let (x1, y1) = (y, WIDTH - x - 1);
+                    self.panel.leds[x1 + y1 * WIDTH]
+                }
+                Orientation::South => {
+                    let (x1, y1) = (WIDTH - x - 1, WIDTH - y - 1);
+                    self.panel.leds[x1 + y1 * WIDTH]
+                }
+                Orientation::West => {
+                    let (x1, y1) = (WIDTH - y - 1, x);
+                    self.panel.leds[x1 + y1 * WIDTH]
+                }
+            };
+            self.index += 1;
+            Some(out)
+        } else {
+            None
+        }
+    }
 }
 
 impl Default for Panel {
