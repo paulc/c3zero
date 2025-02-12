@@ -2,18 +2,13 @@ use anyhow::{bail, Result};
 
 use crate::rgb::{Rgb, OFF};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum Orientation {
+    #[default]
     North,
     East,
     South,
     West,
-}
-
-impl Default for Orientation {
-    fn default() -> Self {
-        Orientation::North
-    }
 }
 
 const WIDTH: usize = 8;
@@ -92,6 +87,12 @@ impl Default for Panel {
 #[derive(Clone, Debug)]
 pub struct Matrix1D<const N: usize> {
     panels: [Panel; N],
+}
+
+impl<const N: usize> Default for Matrix1D<N> {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl<const N: usize> Matrix1D<N> {
