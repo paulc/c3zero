@@ -1,6 +1,4 @@
-use anyhow::{bail, Result};
-
-use crate::rgb::{Rgb, OFF};
+use crate::rgb::{Rgb, RgbTransform, OFF};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum Orientation {
@@ -106,13 +104,25 @@ impl<const N: usize> Matrix1D<N> {
     pub fn clear(&mut self) {
         (0..N).for_each(|i| self.panels[i].clear())
     }
-    pub fn set(&mut self, (x, y): (usize, usize), rgb: Rgb) -> Result<()> {
-        if y > HEIGHT - 1 || x > (WIDTH * N) - 1 {
-            bail!("Coords out of bounds: ({x},{y}");
+    // Pass (x,y) as i32 to handle transformations more easily
+    pub fn set(&mut self, (x, y): (i32, i32), rgb: Rgb) {
+        if (0..HEIGHT as i32).contains(&y) && (0..(N * WIDTH) as i32).contains(&x) {
+            let (x, y) = (x as usize, y as usize);
+            let (i, x) = (x / WIDTH, x % WIDTH);
+            self.panels[i].leds[x + y * WIDTH] = rgb;
         }
-        let (i, x) = (x / WIDTH, x % WIDTH);
-        self.panels[i].leds[x + y * WIDTH] = rgb;
-        Ok(())
+    }
+    pub fn transform(&mut self, (x1, y1): (i32, i32), (x2, y2): (i32, i32), t: &[RgbTransform]) {
+        for x in x1..x2 {
+            for y in y1..y2 {
+                if (0..HEIGHT as i32).contains(&y) && (0..(N * WIDTH) as i32).contains(&x) {
+                    let (x, y) = (x as usize, y as usize);
+                    let (i, x) = (x / WIDTH, x % WIDTH);
+                    let rgb = self.panels[i].leds[x + y * WIDTH];
+                    self.panels[i].leds[x + y * WIDTH] = rgb.transform(t);
+                }
+            }
+        }
     }
     pub fn iter(&mut self) -> Matrix1DIterator<'_, N> {
         Matrix1DIterator {

@@ -3,7 +3,7 @@ use esp_idf_hal::rmt::{config::TransmitConfig, TxRmtDriver};
 use esp_idf_hal::{delay::FreeRtos, gpio::OutputPin, prelude::Peripherals};
 
 use c3zero::matrix_1d::{Matrix1D, Orientation, Panel};
-use c3zero::rgb::{self, RgbLayout};
+use c3zero::rgb::{self, RgbLayout, RgbTransform};
 use c3zero::ws2812_rmt::{Ws2812Rmt, Ws2812RmtSingle};
 
 fn main() -> Result<()> {
@@ -26,22 +26,27 @@ fn main() -> Result<()> {
 
     loop {
         for o in [
-            Orientation::North,
+            //Orientation::North,
             Orientation::East,
-            Orientation::South,
-            Orientation::West,
+            //Orientation::South,
+            //Orientation::West,
         ] {
             println!(">> Orientation:: {o:?}");
             let (p1, p2) = (Panel::new(o), Panel::new(o));
             let mut matrix = Matrix1D::<2>::from_panels([p1, p2]);
             for y in 0..8 {
                 for x in 0..16 {
-                    matrix.clear();
-                    matrix.set((x, y), rgb::BLUE)?;
+                    matrix.transform(
+                        (0, 0),
+                        (16, 8),
+                        &[RgbTransform::Intensity(0.3), RgbTransform::Rotate],
+                    );
+                    matrix.set((x, y), rgb::BLUE);
                     ws2812.set(matrix.iter())?;
                     FreeRtos::delay_ms(50);
                 }
             }
+            FreeRtos::delay_ms(5000);
         }
     }
 }

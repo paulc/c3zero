@@ -6,6 +6,12 @@ pub enum RgbLayout {
     Grb,
 }
 
+#[derive(Clone, Copy, Debug)]
+pub enum RgbTransform {
+    Intensity(f32),
+    Rotate,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Rgb {
     r: u8,
@@ -51,11 +57,42 @@ impl Rgb {
             b: ((b + m) * 255.0) as u8,
         })
     }
+    #[inline]
+    pub fn from_f32((r, g, b): (f32, f32, f32)) -> Self {
+        Self {
+            r: (r * 255.0) as u8,
+            g: (g * 255.0) as u8,
+            b: (b * 255.0) as u8,
+        }
+    }
+    #[inline]
+    pub fn to_f32(&self) -> (f32, f32, f32) {
+        (
+            self.r as f32 / 255.0,
+            self.g as f32 / 255.0,
+            self.b as f32 / 255.0,
+        )
+    }
+    #[inline]
     pub fn to_u32(&self, format: RgbLayout) -> u32 {
         match format {
             RgbLayout::Rgb => ((self.r as u32) << 16) | ((self.g as u32) << 8) | self.b as u32,
             RgbLayout::Grb => ((self.g as u32) << 16) | ((self.r as u32) << 8) | self.b as u32,
         }
+    }
+    pub fn transform(&self, transforms: &[RgbTransform]) -> Self {
+        let (mut r, mut g, mut b) = self.to_f32();
+        for t in transforms {
+            (r, g, b) = match t {
+                RgbTransform::Rotate => (g, b, r),
+                RgbTransform::Intensity(i) => (
+                    (r * i).clamp(0.0, 1.0),
+                    (g * i).clamp(0.0, 1.0),
+                    (b * i).clamp(0.0, 1.0),
+                ),
+            }
+        }
+        Self::from_f32((r, g, b))
     }
 }
 
