@@ -10,6 +10,8 @@ pub enum RgbLayout {
 pub enum RgbTransform {
     Intensity(f32),
     Rotate,
+    Fill(Rgb),
+    FillThreshold(Rgb, f32),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -84,6 +86,14 @@ impl Rgb {
         let (mut r, mut g, mut b) = self.to_f32();
         for t in transforms {
             (r, g, b) = match t {
+                RgbTransform::Fill(rgb) => rgb.to_f32(),
+                RgbTransform::FillThreshold(rgb, t) => {
+                    if (r + g + b) > *t {
+                        (r, g, b)
+                    } else {
+                        rgb.to_f32()
+                    }
+                }
                 RgbTransform::Rotate => (g, b, r),
                 RgbTransform::Intensity(i) => (
                     (r * i).clamp(0.0, 1.0),

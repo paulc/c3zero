@@ -1,3 +1,5 @@
+use font8x8::{UnicodeFonts, BASIC_FONTS};
+
 use crate::rgb::{Rgb, RgbTransform, OFF};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -12,6 +14,7 @@ pub enum Orientation {
 const WIDTH: usize = 8;
 const HEIGHT: usize = 8;
 const PANEL_PIXELS: usize = WIDTH * HEIGHT;
+const CHAR_WIDTH: usize = 8;
 
 #[derive(Clone, Debug)]
 pub struct Panel {
@@ -123,6 +126,35 @@ impl<const N: usize> Matrix1D<N> {
                 }
             }
         }
+    }
+    pub fn draw_char(&mut self, c: char, rgb: Rgb, (x1, y1): (i32, i32)) {
+        if let Some(glyph) = BASIC_FONTS.get(c) {
+            for (y, row) in glyph.into_iter().enumerate() {
+                for x in 0..8 {
+                    if row & (1 << x) != 0 {
+                        self.set((x1 + x, y1 + y as i32), rgb)
+                    }
+                }
+            }
+        }
+    }
+    pub fn draw_str(&mut self, s: &str, rgb: Rgb, (x1, y1): (i32, i32)) {
+        for (i, c) in s.chars().enumerate() {
+            if let Some(glyph) = BASIC_FONTS.get(c) {
+                for (y, row) in glyph.into_iter().enumerate() {
+                    for x in 0..8 {
+                        if row & (1 << x) != 0 {
+                            self.set((x1 + x + (i * CHAR_WIDTH) as i32, y1 + y as i32), rgb)
+                        }
+                    }
+                }
+            }
+        }
+    }
+    // Returns iterator with x co-ordinates to scroll string of length len
+    pub fn scroll_iter(&self, len: usize) -> impl Iterator<Item = i32> {
+        let width = (len * CHAR_WIDTH) as i32;
+        (-width..(N * WIDTH) as i32).rev()
     }
     pub fn iter(&mut self) -> Matrix1DIterator<'_, N> {
         Matrix1DIterator {
