@@ -1,6 +1,10 @@
 use anyhow::Result;
 use esp_idf_hal::{delay::FreeRtos, gpio::OutputPin, prelude::Peripherals};
 
+fn get_free_heap_size() -> usize {
+    unsafe { esp_idf_sys::xPortGetFreeHeapSize() as usize }
+}
+
 use c3zero::matrix_1d::{Orientation, Panel};
 use c3zero::message::{Message, Ws2812Message};
 use c3zero::rgb::{self, RgbLayout};
@@ -8,6 +12,7 @@ use c3zero::status::{LedState, Status};
 
 fn main() -> Result<()> {
     esp_idf_hal::sys::link_patches();
+
     // Bind the log crate to the ESP Logging facilities
     esp_idf_svc::log::EspLogger::initialize_default();
     log::info!("Starting...");
@@ -47,6 +52,7 @@ fn main() -> Result<()> {
         ] {
             Ws2812Message::<2>::update(m)?;
             Status::update(led)?;
+            log::info!(">> Heap Free: {}", get_free_heap_size());
             FreeRtos::delay_ms(t);
         }
     }
