@@ -1,4 +1,6 @@
 use font8x8::{UnicodeFonts, BASIC_FONTS};
+use std::iter::Rev;
+use std::ops::Range;
 
 use crate::rgb::{Rgb, RgbTransform, OFF};
 
@@ -11,10 +13,10 @@ pub enum Orientation {
     West,
 }
 
-const WIDTH: usize = 8;
-const HEIGHT: usize = 8;
-const PANEL_PIXELS: usize = WIDTH * HEIGHT;
-const CHAR_WIDTH: usize = 8;
+pub const WIDTH: usize = 8;
+pub const HEIGHT: usize = 8;
+pub const PANEL_PIXELS: usize = WIDTH * HEIGHT;
+pub const CHAR_WIDTH: usize = 8;
 
 #[derive(Clone, Debug)]
 pub struct Panel {
@@ -152,7 +154,7 @@ impl<const N: usize> Matrix1D<N> {
         }
     }
     // Returns iterator with x co-ordinates to scroll string of length len
-    pub fn scroll_iter(&self, len: usize) -> impl Iterator<Item = i32> {
+    pub fn scroll_iter(&self, len: usize) -> Rev<Range<i32>> {
         let width = (len * CHAR_WIDTH) as i32;
         (-width..(N * WIDTH) as i32).rev()
     }

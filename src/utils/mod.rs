@@ -2,6 +2,7 @@ pub mod hash;
 pub mod httpd;
 pub mod matrix;
 pub mod matrix_1d;
+pub mod message;
 pub mod nvs;
 pub mod rgb;
 pub mod status;

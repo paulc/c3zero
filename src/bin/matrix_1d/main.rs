@@ -22,31 +22,27 @@ fn main() -> Result<()> {
     let channel = peripherals.rmt.channel1;
     let config = TransmitConfig::new().clock_divider(1);
     let tx = TxRmtDriver::new(channel, led, &config)?;
-    let mut ws2812 = Ws2812Rmt::new(tx, 64, RgbLayout::Grb);
+    let mut ws2812 = Ws2812Rmt::new(tx, 64 * 2, RgbLayout::Grb);
 
     loop {
-        text(&mut ws2812)?;
-        scroll(&mut ws2812)?;
+        scroll(&mut ws2812, "Hello There!")?;
+        scroll(
+            &mut ws2812,
+            "This is a long message... 0123456789 ±!@£$%^&*()",
+        )?;
+        chase(&mut ws2812)?;
     }
 }
 
-fn text(ws2812: &mut Ws2812Rmt) -> Result<()> {
+fn scroll(ws2812: &mut Ws2812Rmt, msg: &str) -> Result<()> {
     let (p1, p2) = (Panel::new(Orientation::East), Panel::new(Orientation::East));
     let mut matrix = Matrix1D::<2>::from_panels([p1, p2]);
-    for x in -8..16 {
-        matrix.clear();
-        matrix.draw_char('A', Rgb::new(128, 0, 0), (x, 0));
-        ws2812.set(matrix.iter())?;
-        FreeRtos::delay_ms(50);
-    }
-    let msg = "Hello There!";
     for x in matrix.scroll_iter(msg.len()) {
         matrix.clear();
         matrix.draw_str(msg, Rgb::new(128, 0, 0), (x, 0));
         ws2812.set(matrix.iter())?;
         FreeRtos::delay_ms(50);
     }
-    let msg = "This is a long message... 0123456789 ±!@£$%^&*()";
     for x in matrix.scroll_iter(msg.len()) {
         matrix.clear();
         matrix.draw_str(msg, Rgb::new(128, 0, 0), (x, 0));
@@ -56,7 +52,7 @@ fn text(ws2812: &mut Ws2812Rmt) -> Result<()> {
     Ok(())
 }
 
-fn scroll(ws2812: &mut Ws2812Rmt) -> Result<()> {
+fn chase(ws2812: &mut Ws2812Rmt) -> Result<()> {
     for o in [
         Orientation::North,
         Orientation::East,

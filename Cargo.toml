@@ -26,6 +26,10 @@ harness = false # do not use the built in cargo test harness -> resolve rust-ana
 name = "matrix_1d"
 harness = false # do not use the built in cargo test harness -> resolve rust-analyzer errors
 
+[[bin]]
+name = "message"
+harness = false # do not use the built in cargo test harness -> resolve rust-analyzer errors
+
 [profile.release]
 opt-level = "s"
 
