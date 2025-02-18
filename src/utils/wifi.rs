@@ -127,9 +127,6 @@ pub fn start_access_point(wifi: &mut EspWifi) -> anyhow::Result<()> {
 
     println!("Access Point started. Connect to ESP32C3-AP with password 'password'");
 
-    // Here you would implement a web server to capture the WiFi credentials
-    // and save them using `save_wifi_config`
-
     Ok(())
 }
 

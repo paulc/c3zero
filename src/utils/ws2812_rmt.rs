@@ -9,6 +9,7 @@ const T0H: u64 = 400;
 const T0L: u64 = 850;
 const T1H: u64 = 800;
 const T1L: u64 = 450;
+const RESET: u64 = 50000;
 
 pub type Ws2812RmtChannel = esp_idf_hal::rmt::CHANNEL0;
 
@@ -67,7 +68,8 @@ impl<'a> Ws2812Rmt<'a> {
     // let tx = TxRmtDriver::new(channel, led, &config)?;
     //
     pub fn new(tx: TxRmtDriver<'a>, n: usize, format: RgbLayout) -> Self {
-        let signal = esp_idf_hal::rmt::VariableLengthSignal::with_capacity(n);
+        // 2 pulses / led + reset
+        let signal = esp_idf_hal::rmt::VariableLengthSignal::with_capacity(2 * n + 1);
         Self { tx, signal, format }
     }
     pub fn set<T>(&mut self, colours: T) -> Result<()>
@@ -76,11 +78,12 @@ impl<'a> Ws2812Rmt<'a> {
     {
         self.signal.clear();
         let ticks_hz = self.tx.counter_clock()?;
-        let (t0h, t0l, t1h, t1l) = (
+        let (t0h, t0l, t1h, t1l, reset) = (
             Pulse::new_with_duration(ticks_hz, PinState::High, &Duration::from_nanos(T0H))?,
             Pulse::new_with_duration(ticks_hz, PinState::Low, &Duration::from_nanos(T0L))?,
             Pulse::new_with_duration(ticks_hz, PinState::High, &Duration::from_nanos(T1H))?,
             Pulse::new_with_duration(ticks_hz, PinState::Low, &Duration::from_nanos(T1L))?,
+            Pulse::new_with_duration(ticks_hz, PinState::Low, &Duration::from_nanos(RESET))?,
         );
         for rgb in colours {
             let colour: u32 = rgb.to_u32(self.format);
@@ -92,6 +95,7 @@ impl<'a> Ws2812Rmt<'a> {
                 }
             }
         }
+        self.signal.push([&reset])?;
         self.tx.start_blocking(&self.signal)?;
         Ok(())
     }

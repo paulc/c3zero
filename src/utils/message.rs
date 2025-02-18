@@ -81,11 +81,19 @@ impl<const N: usize> Ws2812Message<N> {
                         }
                     }
                 }
-                match message {
+                match &message {
                     Message::Off => {}
-                    Message::Message(_, _) => {}
-                    Message::Scroll(ref s, rgb, t) => {
-                        if ticks % t == 0 {
+                    // Message::Message(_, _) => {}
+                    Message::Message(s, rgb) => {
+                        // Refresh every 10 ticks
+                        if ticks % 10 == 0 {
+                            matrix.clear();
+                            matrix.draw_str(&s, *rgb, (0, 0));
+                            ws2812.set(matrix.iter())?;
+                        }
+                    }
+                    Message::Scroll(s, rgb, t) => {
+                        if *t == 0 || ticks % t == 0 {
                             let x = if let Some(x) = scroll_iter.next() {
                                 x
                             } else {
@@ -94,7 +102,7 @@ impl<const N: usize> Ws2812Message<N> {
                                 scroll_iter.next().unwrap_or(0)
                             };
                             matrix.clear();
-                            matrix.draw_str(s, rgb, (x, 0));
+                            matrix.draw_str(s, *rgb, (x, 0));
                             ws2812.set(matrix.iter())?;
                         }
                     }

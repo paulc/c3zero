@@ -153,7 +153,9 @@
                     <tr>
                         <td>{{ ap }}</td>
                         <td>
-                            <a href="/delete/{{ ap }}" class="button delete"
+                            <a
+                                href="/config/delete/{{ ap }}"
+                                class="button delete"
                                 >Delete</a
                             >
                         </td>
@@ -165,7 +167,7 @@
             <div class="form-container" style="max-width: 800px">
                 <h2>Add AP</h2>
                 <form
-                    action="/add"
+                    action="/config/add"
                     method="post"
                     style="display: flex; align-items: center; gap: 10px"
                 >

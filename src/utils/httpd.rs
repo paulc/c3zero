@@ -23,10 +23,10 @@ pub fn start_http_server<'a>() -> anyhow::Result<EspHttpServer<'a>> {
     };
     let mut server = EspHttpServer::new(&config)?;
 
-    server.fn_handler("/", http::Method::Get, handle_config)?;
+    server.fn_handler("/config", http::Method::Get, handle_config)?;
     server.fn_handler("/hello", http::Method::Get, handle_hello)?;
-    server.fn_handler("/delete/*", http::Method::Get, handle_delete)?;
-    server.fn_handler("/add", http::Method::Post, handle_add)?;
+    server.fn_handler("/config/delete/*", http::Method::Get, handle_delete)?;
+    server.fn_handler("/config/add", http::Method::Post, handle_add)?;
 
     log::info!("Web server started");
 
@@ -82,12 +82,16 @@ fn handle_delete(request: Request<&mut EspHttpConnection>) -> anyhow::Result<()>
             }
             Err(e) => {
                 log::error!("Failed to delete SSID: {} - {}", ssid, e);
-                request.into_response(302, Some("Failed to delete SSID"), &[("Location", "/")])?;
+                request.into_response(
+                    302,
+                    Some("Failed to delete SSID"),
+                    &[("Location", "/config")],
+                )?;
             }
         }
     } else {
         log::error!("Unknown SSID: {}", ssid);
-        request.into_response(302, Some("Unknown SSID"), &[("Location", "/")])?;
+        request.into_response(302, Some("Unknown SSID"), &[("Location", "/config")])?;
     }
     Ok::<(), anyhow::Error>(())
 }
@@ -106,7 +110,7 @@ fn handle_add(mut request: Request<&mut EspHttpConnection>) -> anyhow::Result<()
                     request.into_response(
                         302,
                         Some("Successfully saved SSID"),
-                        &[("Location", "/")],
+                        &[("Location", "/config")],
                     )?;
                 }
                 Err(e) => {
@@ -114,7 +118,7 @@ fn handle_add(mut request: Request<&mut EspHttpConnection>) -> anyhow::Result<()
                     request.into_response(
                         302,
                         Some("Failed to save SSID"),
-                        &[("Location", "/")],
+                        &[("Location", "/config")],
                     )?;
                 }
             }
